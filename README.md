@@ -15,14 +15,14 @@ Harbor is intentionally no longer part of the default path.
 The infrastructure is now driven by:
 
 - `infrastructure/config.env`: runtime defaults (Python version, v6 version, server/UI settings, paths)
-- `infrastructure/nodes.env`: node specs (`name|api_key|db_uri|db_type|db_label`)
+- `infrastructure/nodes.<profile>.env`: node specs (`name|api_key|db_uri|db_type|db_label`) — `nodes.lung1.env` is the default profile, used when no `--nodes` flag is given (see "Switching node profiles" below)
 - generated runtime artifacts in `infrastructure/generated/`
 
 No hardcoded `alpha/beta/gamma` logic is required anymore. Any number of nodes can be used.
 
 ## Quick start
 
-1. Edit `infrastructure/config.env` and `infrastructure/nodes.env`.
+1. Edit `infrastructure/config.env` and `infrastructure/nodes.lung1.env`.
 2. Run preflight checks:
 
 ```bash
@@ -64,7 +64,7 @@ If the published GHCR `server-lite` / `node-lite` / `ui` images are only availab
 
 ## Node spec examples
 
-`infrastructure/nodes.env` supports mixed backends:
+`infrastructure/nodes.<profile>.env` supports mixed backends:
 
 ```text
 alpha|<api_key>|../data/alpha.csv|csv|default
@@ -74,6 +74,18 @@ beta|<api_key>|postgresql://user:pass@db:5432/demo|sql|warehouse
 If `db_uri` is empty, it defaults to `${DATA_DIR_DEFAULT}/<name>.csv`.
 
 An optional second, read-only **folder** database can be added via 3 extra columns — `name|api_key|db_uri|db_type|db_label|extra_db_uri|extra_db_type|extra_db_label` — bind-mounted read-only at `/mnt/<extra_db_label>` inside algorithm containers. `argos_cnn` uses this to mount each org's NIfTI folder alongside its CSV manifest; see `infrastructure/nodes.argos.env`.
+
+### Switching node profiles
+
+Every algorithm's data layout — including the default LUNG1 CSVs — lives in its own `infrastructure/nodes.<profile>.env` file (`nodes.lung1.env`, `nodes.beach.env`, `nodes.argos.env`, ...). There is no bare `nodes.env`; the default is just the `lung1` profile like any other. Point any command at a profile with `--nodes <profile>` (before or after the command name):
+
+```bash
+./infra.sh --nodes lung1 up    # same as plain `./infra.sh up`
+./infra.sh --nodes beach up
+./infra.sh preflight --nodes argos
+```
+
+With no `--nodes` flag, `infra.sh` falls back to the `lung1` profile (`config.env`'s `NODES_CONFIG` default). `./infra.sh help` lists every profile it discovered. Adding a new algorithm's data layout only requires dropping in a new `nodes.<profile>.env` file — no changes to `infra.sh` itself.
 
 Generated node YAML keeps the runtime-critical fields explicit:
 
@@ -216,7 +228,7 @@ If the nodes report `non-existing Docker image`, see the **Local image registry*
 
    ```bash
    cd infrastructure
-   ENVIRONMENT=DEV ./infra.sh up_beach
+   ENVIRONMENT=DEV ./infra.sh --nodes beach up
    ```
 
 3. **Build the algorithm image** (from repo root):
@@ -249,7 +261,7 @@ If the nodes report `non-existing Docker image`, see the **Local image registry*
 
    ```bash
    cd infrastructure
-   ENVIRONMENT=DEV ./infra.sh up_argos
+   ENVIRONMENT=DEV ./infra.sh --nodes argos up
    ```
 
 3. **Build the algorithm image** (from repo root — copies both `argos_cnn.py` and `model.py`):

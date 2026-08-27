@@ -82,7 +82,7 @@ init_config_defaults() {
   server_config_basename="$(basename "$SERVER_CONFIG")"
   SERVER_NAME="${SERVER_NAME:-${server_config_basename%.*}}"
 
-  NODES_CONFIG="${NODES_CONFIG:-./nodes.env}"
+  NODES_CONFIG="${NODES_CONFIG:-./nodes.lung1.env}"
   NODES_CONFIG="$(abspath_if_local_path "$NODES_CONFIG")"
 
   GENERATED_DIR="${GENERATED_DIR:-./generated}"

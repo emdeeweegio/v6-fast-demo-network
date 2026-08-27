@@ -25,6 +25,8 @@ Keep these files in the algorithm repo:
 - `tests/infra/run_algo_smoke.sh`
 - `tests/infra/vars.env.example` (recommended placeholders for local env vars)
 
+`infra.sh` has no bare default node spec file — even its own built-in demo dataset is just a profile (`nodes.lung1.env`). Copy your repo's `tests/infra/nodes.env` into the harness as your own named profile (e.g. `nodes.<algo>.env`) and pass `--nodes <algo>` on every lifecycle command instead of relying on a default filename.
+
 `nodes.env` format:
 
 ```text
@@ -82,14 +84,14 @@ cd "$INFRA_DIR"
 git checkout <INFRA_SHA>
 
 cp "$ALG_ROOT/tests/infra/config.env" infrastructure/config.env
-cp "$ALG_ROOT/tests/infra/nodes.env" infrastructure/nodes.env
+cp "$ALG_ROOT/tests/infra/nodes.env" "infrastructure/nodes.${ALG_NAME:-algo}.env"
 
 cd infrastructure
-PYTHON_INTERPRETER="${PYTHON_INTERPRETER:-python3.12}" ./infra.sh preflight
-PYTHON_INTERPRETER="${PYTHON_INTERPRETER:-python3.12}" ENVIRONMENT=CI UI_ENABLED="${UI_ENABLED:-false}" ./infra.sh up
+PYTHON_INTERPRETER="${PYTHON_INTERPRETER:-python3.12}" ./infra.sh --nodes "${ALG_NAME:-algo}" preflight
+PYTHON_INTERPRETER="${PYTHON_INTERPRETER:-python3.12}" ENVIRONMENT=CI UI_ENABLED="${UI_ENABLED:-false}" ./infra.sh --nodes "${ALG_NAME:-algo}" up
 bash "$ALG_ROOT/tests/infra/run_algo_smoke.sh"
-PYTHON_INTERPRETER="${PYTHON_INTERPRETER:-python3.12}" UI_ENABLED="${UI_ENABLED:-false}" ./infra.sh test
-PYTHON_INTERPRETER="${PYTHON_INTERPRETER:-python3.12}" ENVIRONMENT=CI UI_ENABLED="${UI_ENABLED:-false}" ./infra.sh down
+PYTHON_INTERPRETER="${PYTHON_INTERPRETER:-python3.12}" UI_ENABLED="${UI_ENABLED:-false}" ./infra.sh --nodes "${ALG_NAME:-algo}" test
+PYTHON_INTERPRETER="${PYTHON_INTERPRETER:-python3.12}" ENVIRONMENT=CI UI_ENABLED="${UI_ENABLED:-false}" ./infra.sh --nodes "${ALG_NAME:-algo}" down
 ```
 
 If permissions are stale or task creation fails unexpectedly, do a clean restart:
@@ -185,20 +187,20 @@ Use `actions/checkout` twice: once for the algorithm repo and once for infra har
 - name: Inject repo test config
   run: |
     cp tests/infra/config.env tools/v6-infra/infrastructure/config.env
-    cp tests/infra/nodes.env tools/v6-infra/infrastructure/nodes.env
+    cp tests/infra/nodes.env "tools/v6-infra/infrastructure/nodes.${{ github.event.repository.name }}.env"
 
 - name: Start infra
-  run: PYTHON_INTERPRETER=python3.12 ENVIRONMENT=CI UI_ENABLED=false tools/v6-infra/infrastructure/infra.sh up
+  run: PYTHON_INTERPRETER=python3.12 ENVIRONMENT=CI UI_ENABLED=false tools/v6-infra/infrastructure/infra.sh --nodes "${{ github.event.repository.name }}" up
 
 - name: Algorithm smoke
   run: bash tests/infra/run_algo_smoke.sh
 
 - name: Infra smoke
-  run: PYTHON_INTERPRETER=python3.12 UI_ENABLED=false tools/v6-infra/infrastructure/infra.sh test
+  run: PYTHON_INTERPRETER=python3.12 UI_ENABLED=false tools/v6-infra/infrastructure/infra.sh --nodes "${{ github.event.repository.name }}" test
 
 - name: Shutdown infra
   if: always()
-  run: PYTHON_INTERPRETER=python3.12 ENVIRONMENT=CI UI_ENABLED=false tools/v6-infra/infrastructure/infra.sh down
+  run: PYTHON_INTERPRETER=python3.12 ENVIRONMENT=CI UI_ENABLED=false tools/v6-infra/infrastructure/infra.sh --nodes "${{ github.event.repository.name }}" down
 ```
 
 ## Guardrails
@@ -218,7 +220,7 @@ Use `actions/checkout` twice: once for the algorithm repo and once for infra har
 3. Local container `run_context` smoke failed: fix the algorithm/container contract before infra.
 4. `up` fails: server/node startup config mismatch.
 5. `run_algo_smoke.sh` fails: algorithm/package/runtime issue. Inspect the master org node container traceback first.
-6. `infra.sh test` fails: verify `UI_ENABLED`/`NODES_CONFIG` match how infra was started.
+6. `infra.sh test` fails: verify `UI_ENABLED`/`--nodes` match how infra was started.
 7. Task status `non-existing Docker image`: use local registry with configurable port and retag image.
 8. Harbor server/node image pull fails: Harbor is retired for this use; switch to GHCR `server-lite` / `node-lite` / `ui` images or a local mirror of them.
 9. `down` fails: teardown residue; rerun and inspect remaining containers.
