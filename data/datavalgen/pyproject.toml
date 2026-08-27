@@ -1,0 +1,28 @@
+[project]
+name = "datavalgen-test"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "TomSinsel", email = "sinseltom@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "datavalgen",
+    "pydantic>=2.13.4",
+]
+
+[project.scripts]
+datavalgen-test = "datavalgen_test:main"
+
+[project.entry-points."datavalgen.models"]
+example = "datavalgen_test.model:ExampleDataModel"
+
+[project.entry-points."datavalgen.factories"]
+example = "datavalgen_test.factory:ExampleDataFactory"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+datavalgen = { path = "../datavalgen", editable = true }
