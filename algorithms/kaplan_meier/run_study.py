@@ -18,6 +18,15 @@ TIME_COL = "Survival.time"
 EVENT_COL = "deadstatus.event"
 STEP_DAYS = 30
 
+# Optional privacy noise injection on event times before aggregation.
+# NOISE_TYPE: "none" (default), "gaussian" (needs SNR > 0), or "poisson".
+# RANDOM_SEED: leave None to let central() generate a fresh one per run
+# (it's echoed back in the result for reproducibility); set it to repeat
+# a specific run's noise exactly.
+NOISE_TYPE = "none"
+SNR = None
+RANDOM_SEED = None
+
 
 def plot_km_curve(curve: list, n_patients: int, n_events: int, step_days: int, output_path: str = "km_curve.png") -> None:
     times = [p["time"] for p in curve]
@@ -107,6 +116,10 @@ def main() -> None:
     print(f"Time column   : {TIME_COL}")
     print(f"Event column  : {EVENT_COL}")
     print(f"Step days     : {STEP_DAYS}")
+    print(f"Noise type    : {NOISE_TYPE}")
+    if NOISE_TYPE != "none":
+        print(f"SNR           : {SNR}")
+        print(f"Random seed   : {RANDOM_SEED}")
     print()
 
     task = client.task.create(
@@ -121,6 +134,9 @@ def main() -> None:
                 "time_col": TIME_COL,
                 "event_col": EVENT_COL,
                 "step_days": STEP_DAYS,
+                "noise_type": NOISE_TYPE,
+                "snr": SNR,
+                "random_seed": RANDOM_SEED,
             },
         },
         databases=[{"label": "default"}],
@@ -153,6 +169,8 @@ def main() -> None:
     curve = result["curve"]
 
     print(f"\nResults: {n_patients} patients, {n_events} events, {step_days}-day steps")
+    if result.get("noise_type", "none") != "none":
+        print(f"Noise applied: {result['noise_type']} (snr={result.get('snr')}, random_seed={result.get('random_seed')})")
     print_km_table(curve)
     plot_km_curve(curve, n_patients, n_events, step_days)
 

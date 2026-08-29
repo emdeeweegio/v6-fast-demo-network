@@ -8,6 +8,50 @@ TIME_COL = "Survival.time"
 EVENT_COL = "deadstatus.event"
 STEP_DAYS = 30
 
+NOISE_TYPES = {"none", "gaussian", "poisson"}
+NOISE_TYPE = "none"
+SNR = None
+RANDOM_SEED = None
+
+
+def _apply_gaussian_noise(df: pd.DataFrame, time_col: str, snr: float) -> pd.DataFrame:
+    if snr is None or snr <= 0:
+        raise ValueError("For Gaussian noise, 'snr' must be provided and > 0.")
+    variance = np.var(df[time_col])
+    std_dev = np.sqrt(variance / snr)
+    noise = np.random.normal(0, std_dev, size=len(df))
+    info(f"Applying Gaussian noise with std dev {std_dev:.4f}.")
+    df[time_col] = (df[time_col] + np.round(noise)).clip(lower=0.0)
+    return df
+
+
+def _apply_poisson_noise(df: pd.DataFrame, time_col: str) -> pd.DataFrame:
+    info("Applying Poisson noise.")
+    df[time_col] = df[time_col].apply(lambda x: np.random.poisson(lam=x) if x > 0 else 0)
+    return df
+
+
+def add_noise_to_event_times(
+    df: pd.DataFrame,
+    time_col: str,
+    noise_type: str = None,
+    snr: float = None,
+    random_seed: int = None,
+) -> pd.DataFrame:
+    noise_type = noise_type or "none"
+    if noise_type not in NOISE_TYPES:
+        raise ValueError(f"Unknown noise type: {noise_type!r}; expected one of {sorted(NOISE_TYPES)}")
+    if noise_type == "none":
+        return df
+
+    df = df.copy()
+    if random_seed is not None:
+        np.random.seed(random_seed)
+
+    if noise_type == "gaussian":
+        return _apply_gaussian_noise(df, time_col, snr)
+    return _apply_poisson_noise(df, time_col)
+
 
 @algorithm_client
 def central(
@@ -15,7 +59,26 @@ def central(
     time_col: str = TIME_COL,
     event_col: str = EVENT_COL,
     step_days: int = STEP_DAYS,
+    noise_type: str = NOISE_TYPE,
+    snr: float = SNR,
+    random_seed: int = RANDOM_SEED,
 ) -> dict:
+    noise_type = noise_type or "none"
+    if noise_type not in NOISE_TYPES:
+        return {"error": f"Unknown noise type: {noise_type!r}; expected one of {sorted(NOISE_TYPES)}"}
+    if noise_type == "gaussian" and (snr is None or snr <= 0):
+        return {"error": "For Gaussian noise, 'snr' must be provided and > 0."}
+
+    # Both phases must apply identical noise to the same node's data, or the
+    # time range computed in phase 1 won't bound the noised times used in
+    # phase 2. Resolving one seed here (instead of requiring the caller to
+    # pass one) keeps noise fresh per run while guaranteeing the two phases
+    # agree within this run.
+    if noise_type != "none" and random_seed is None:
+        random_seed = int(np.random.default_rng().integers(0, 2**31 - 1))
+        info(f"No random_seed provided for noise injection; generated one: {random_seed}")
+    noise_kwargs = {"noise_type": noise_type, "snr": snr, "random_seed": random_seed}
+
     orgs = client.organization.list()
     org_ids = [org["id"] for org in orgs]
 
@@ -26,6 +89,10 @@ def central(
     info(f"Time column   : {time_col}")
     info(f"Event column  : {event_col}")
     info(f"Step days     : {step_days}")
+    info(f"Noise type    : {noise_type}")
+    if noise_type != "none":
+        info(f"SNR           : {snr}")
+        info(f"Random seed   : {random_seed}")
 
     # ── Phase 1: determine global time range ─────────────────────────────────
     info("")
@@ -33,7 +100,7 @@ def central(
     range_task = client.task.create(
         input_={
             "method": "get_time_range",
-            "kwargs": {"time_col": time_col, "event_col": event_col},
+            "kwargs": {"time_col": time_col, "event_col": event_col, **noise_kwargs},
         },
         organizations=org_ids,
         name="km_time_range",
@@ -62,6 +129,7 @@ def central(
                 "time_col": time_col,
                 "event_col": event_col,
                 "time_steps": time_steps,
+                **noise_kwargs,
             },
         },
         organizations=org_ids,
@@ -128,6 +196,9 @@ def central(
         "step_days": step_days,
         "n_patients": int(total_n),
         "n_events": total_events,
+        "noise_type": noise_type,
+        "snr": snr,
+        "random_seed": random_seed,
         "curve": curve,
     }
 
@@ -137,11 +208,18 @@ def get_time_range(
     df: pd.DataFrame,
     time_col: str = TIME_COL,
     event_col: str = EVENT_COL,
+    noise_type: str = NOISE_TYPE,
+    snr: float = SNR,
+    random_seed: int = RANDOM_SEED,
 ) -> dict:
     df_clean = df.dropna(subset=[time_col, event_col])
     info(f"Dataset: {len(df)} rows — {len(df_clean)} usable after dropna")
     if len(df_clean) == 0:
         return {"n": 0, "max_time": 0.0}
+    # Noise is applied after dropna so both partial calls (this one and
+    # compute_events) noise the identical set of rows in the identical
+    # order, which is required for the two phases to stay consistent.
+    df_clean = add_noise_to_event_times(df_clean, time_col, noise_type, snr, random_seed)
     max_t = float(df_clean[time_col].max())
     n_events = int((df_clean[event_col] == 1).sum())
     info(f"Local max survival time: {max_t:.1f} days — {n_events} events in {len(df_clean)} patients")
@@ -154,9 +232,13 @@ def compute_events(
     time_col: str = TIME_COL,
     event_col: str = EVENT_COL,
     time_steps: list = None,
+    noise_type: str = NOISE_TYPE,
+    snr: float = SNR,
+    random_seed: int = RANDOM_SEED,
 ) -> dict:
     df_clean = df.dropna(subset=[time_col, event_col])
     info(f"Computing event table: {len(df_clean)} patients, {len(time_steps)} time steps")
+    df_clean = add_noise_to_event_times(df_clean, time_col, noise_type, snr, random_seed)
 
     times = df_clean[time_col].to_numpy(dtype=float)
     events = df_clean[event_col].to_numpy(dtype=int)

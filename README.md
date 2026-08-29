@@ -159,7 +159,7 @@ Available algorithms:
 |---|---|
 | `average/` | Federated average of a single column |
 | `logistic_regression/` | Federated logistic regression with normalization, batch training, and per-node evaluation |
-| `kaplan_meier/` | Federated Kaplan-Meier survival curve with 95% CI and a matplotlib plot |
+| `kaplan_meier/` | Federated Kaplan-Meier survival curve with 95% CI, a matplotlib plot, and optional Gaussian/Poisson noise injection on event times for privacy |
 | `coxph/` | Federated Cox proportional hazards regression (hazard ratios across covariates) via federated Newton-Raphson iterations |
 | `fed_statistics/` | Federated descriptive statistics (counts, binned counts, min/max, mean, std, bootstrap quantiles, nrows, nans) with threshold + secondary suppression for privacy |
 | `argos_cnn/` | Federated ModResNet (PyTorch) for CT/GTV tumor segmentation — see **Argos CNN** below |
@@ -229,6 +229,8 @@ To test a different column/variable (e.g. `VARIABLE` in `average/run_study.py`, 
 `coxph/` runs against the same LUNG1 data as `kaplan_meier/` (`Survival.time`/`deadstatus.event`), with `age`, `clinical.T.Stage`, `Clinical.N.Stage`, `Clinical.M.Stage` as the default covariates — no new node profile needed. It ships a `test_math_correctness.py` (run with `uv run pytest algorithms/coxph/`) that validates the federated Newton-Raphson fit against a directly-fit reference Cox model on a bundled test fixture — the actual proof the ported math wasn't broken in translation, independent of any live vantage6 infrastructure.
 
 `fed_statistics/` also runs against LUNG1 (no new node profile needed, since it works on any tabular CSV) — override `STATISTICS`/`FILTERS`/`OPTIONS` in `fed_statistics/run_study.py` to request different columns/statistics per run. `OPTIONS` controls privacy suppression (`suppress_threshold`, `suppress_secondary`/`suppress_key`) and quantile bootstrap iterations; see `algorithms/fed_statistics/test_stats_correctness.py` (run with `uv run pytest algorithms/fed_statistics/`) for worked examples of each statistic plus the secondary-suppression mechanism.
+
+`kaplan_meier/run_study.py` also exposes `NOISE_TYPE`/`SNR`/`RANDOM_SEED` — set `NOISE_TYPE` to `"gaussian"` (with `SNR > 0`) or `"poisson"` to perturb event times as an extra privacy layer before aggregation, on top of the existing `TIME_COL`/`EVENT_COL`/`STEP_DAYS` overrides. Leave `RANDOM_SEED` as `None` to let `central()` generate a fresh one per run (echoed back in the result for reproducibility), or set it to repeat a specific run's noise exactly. Both federated phases (`get_time_range`/`compute_events`) apply identical noise given the same seed. `uv run pytest algorithms/kaplan_meier/` covers both the core survival-curve math (`test_kaplan_meier.py` — cross-checked against an independent classical product-limit KM reference and against a single-organization pooled run, since the federated split/sum must reproduce the pooled result exactly) and the noise-injection mechanism (`test_noise_injection.py` — cross-phase consistency and backward-compatibility). Default `NOISE_TYPE = "none"` reproduces the pre-noise-injection curve exactly.
 
 ### Adding your own algorithm
 
