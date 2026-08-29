@@ -14,7 +14,7 @@ wheels = [
 [[package]]
 name = "datavalgen"
 version = "0.0.0"
-source = { editable = "../datavalgen" }
+source = { editable = "../../../datavalgen" }
 dependencies = [
     { name = "pandas" },
     { name = "polyfactory" },
@@ -46,7 +46,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "datavalgen", editable = "../datavalgen" },
+    { name = "datavalgen", editable = "../../../datavalgen" },
     { name = "pydantic", specifier = ">=2.13.4" },
 ]
 
