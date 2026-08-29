@@ -49,13 +49,16 @@ def _z_objective(
     quad_val = (num_sites * rho / 2.0) * np.dot(diff, diff)
     value = l1_val + quad_val
 
-    # Gradient
+    # Gradient. abs_z is floored at eps for every component (not just the
+    # intercept at index 0) — any z_reg entry can land on exactly 0.0 during
+    # optimization, and an unguarded 0/0 there produces NaN that poisons the
+    # gradient regardless of lambda_ (0.0 * NaN is NaN, not 0, under IEEE 754).
     eps = 1e-64
     abs_z = np.abs(z_reg)
-    abs_z[0] = eps
+    abs_z = np.where(abs_z < eps, eps, abs_z)
 
     grad_l1 = lambda_ * (z_reg / abs_z)
-    # grad_l1[0] = 0.0
+    # grad_l1[0] == 0.0 already, since z_reg[0] == 0.0.
 
     grad_quad = num_sites * rho * diff
     grad = grad_l1 + grad_quad
@@ -445,7 +448,11 @@ def central_function(
 
         total_val_sse = float(np.sum(val_sse_per_node))
         total_val_patients = int(np.sum(val_patients_per_node))
-        val_rmse_global = float(np.sqrt(total_val_sse / total_val_patients))
+        val_rmse_global = (
+            float(np.sqrt(total_val_sse / total_val_patients))
+            if total_val_patients > 0
+            else float("nan")
+        )
 
         # Store history
         history["round"].append(r)
@@ -514,7 +521,10 @@ def central_function(
         y_all_list.append(y_site)
         probs_all_list.append(probs_site)
 
-        # Per-site ROC / AUC
+        # Per-site ROC / AUC (skipped for sites with no validation patients,
+        # e.g. all local rows fall on the training side of the year cutoff)
+        if y_site.size == 0:
+            continue
         eps = 1e-15
         probs_clipped = np.clip(probs_site, eps, 1.0 - eps)
         fpr_s, tpr_s, _ = roc_curve(y_site, probs_clipped)

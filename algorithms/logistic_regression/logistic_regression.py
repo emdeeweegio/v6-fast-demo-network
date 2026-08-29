@@ -7,7 +7,7 @@ from vantage6.algorithm.tools.util import info
 from vantage6.algorithm.tools.decorators import algorithm_client, data
 from vantage6.algorithm.client import AlgorithmClient
 
-FEATURE_COLS = ["age", "Clinical.N.Stage", "survival_1y"]
+FEATURE_COLS = ["age", "clinical.T.Stage", "Clinical.N.Stage", "Clinical.M.Stage"]
 TARGET_COL = "deadstatus.event"      
 N_ROUNDS = 20
 LOCAL_EPOCHS = 5
@@ -99,6 +99,7 @@ def central(
     info("")
     info("── PHASE 2: Federated training ─────────────────────────────")
     t0 = time.time()
+    torch.manual_seed(RANDOM_SEED)
     global_model = LogisticRegressionModel(n_features)
     global_state = _sd_to_list(global_model.state_dict())
 

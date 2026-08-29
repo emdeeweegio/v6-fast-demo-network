@@ -11,7 +11,7 @@ PASSWORD = "alpha-password"
 ALGORITHM_IMAGE = "logistic_regression:latest"
 COLLABORATION_NAME = "v6-demo"
 INITIATING_ORG = "alpha"
-FEATURE_COLS = ["age", "Clinical.N.Stage", "survival_1y"]
+FEATURE_COLS = ["age", "clinical.T.Stage", "Clinical.N.Stage", "Clinical.M.Stage"]
 TARGET_COL = "deadstatus.event"
 
 

@@ -133,7 +133,10 @@ def _sample_batch(df: pd.DataFrame, batch_size: int, num_channels: int, patch_si
 
         positive_rows = patient_df[patient_df[LABEL_COL] == 1]
         if random.random() < POSITIVE_SLICE_BIAS and len(positive_rows) > 0:
-            center_idx = positive_rows.sample(1).index[0]
+            # random.choice (not pandas' .sample(), which draws from numpy's
+            # global RNG) so this stays governed by the random.seed() call
+            # above like every other draw in this function.
+            center_idx = random.choice(positive_rows.index.tolist())
         else:
             center_idx = random.randrange(n_slices)
 
@@ -167,6 +170,7 @@ def central(
     info(f"Rounds        : {n_rounds}  |  Local steps : {local_steps}")
     info(f"Batch size    : {batch_size}  |  LR          : {learning_rate}")
 
+    torch.manual_seed(RANDOM_SEED)
     global_model = ModResNet(in_channels=NUM_CHANNELS, num_classes=NUM_CLASSES)
     global_state = _state_dict_to_str(global_model.state_dict())
 

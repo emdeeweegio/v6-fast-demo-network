@@ -15,9 +15,9 @@ INITIATING_ORG = "alpha"
 # note: this algorithm expects BEACH-schema node data (patient_t_stage,
 # patient_n_stage, patient_m_stage, patient_overall_stage, year_of_diagnosis,
 # vital_status, interval_diagnosis_to_last_visit_in_days) - i.e. the nodes
-# must have been started with `./infra.sh up_beach` (nodes.beach.env), not
-# the default `./infra.sh up` (nodes.env, LUNG1 schema). It will fail on
-# nodes serving LUNG1 data.
+# must have been started with `./infra.sh --nodes beach up` (nodes.beach.env),
+# not the default `./infra.sh up` (nodes.lung1.env, LUNG1 schema). It will
+# fail on nodes serving LUNG1 data.
 
 # Values below match the reference run in
 # 20kChallengeVantage6/my-fl-project/20kLogRegChallenge/run_on_v6_network.py

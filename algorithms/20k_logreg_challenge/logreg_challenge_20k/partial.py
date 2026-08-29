@@ -156,12 +156,11 @@ def _compute_two_year_survival(
     dead = vs == "dead"
     alive = vs == "alive"
 
-    out[dead] = 0
-    out[alive] = 1
-    # out[dead & (days <= threshold)] = 0 For right data
-    # out[dead & (days > threshold)] = 1
-    # out[alive & (days > threshold)] = 1
-    # out[alive & (days <= threshold)] = 
+    out[dead & (days <= threshold)] = 0
+    out[dead & (days > threshold)] = 1
+    out[alive & (days > threshold)] = 1
+    # alive & (days <= threshold) is left as NaN: insufficient follow-up to
+    # know whether they would have survived to two years.
 
     return out
 
@@ -293,7 +292,7 @@ def _logistic_admm_objective(
     for i in range(n_local):
         xi = X_design[i, :]  # row vector
         yi = outcome[i]
-        exp_term = np.exp(xi @ x)
+        exp_term = np.exp(np.clip(xi @ x, -500, 500))
         grad_i = xi * (yi + (yi - 1) * exp_term) / (1 + exp_term)
         grad_sum += grad_i
 
