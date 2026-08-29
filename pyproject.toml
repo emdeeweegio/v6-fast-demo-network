@@ -16,6 +16,8 @@ dependencies = [
     "datavalgen @ git+https://github.com/mdw-nl/datavalgen.git@v0.4.4",
     "datavalgen-model-beach @ git+https://github.com/MaastrichtU-CDS/datavalgen-model-beach.git",
     "nibabel",
+    "scipy",
+    "pytest",
 ]
 
 [[tool.uv.index]]
