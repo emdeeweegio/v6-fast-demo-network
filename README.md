@@ -141,7 +141,7 @@ The `data/` directory holds the default LUNG1 CSVs plus everything that generate
 | `data/lung1/` | Default LUNG1 CSVs, used by `nodes.lung1.env` (the default profile) |
 | `data/generate_beach_data.py` | Generates BEACH-schema CSVs for `20k_logreg_challenge`, used with `nodes.beach.env` |
 | `data/generate_argos_data.py` | Generates synthetic CT/GTV NIfTI + manifest data for `argos_cnn`, used with `nodes.argos.env` |
-| `data/datavalgen/` | Pydantic schema ("example" model) + CLI for generating/validating fictional patient CSVs by hand, and a vantage6 algorithm (`v6-validate/`) that runs that same validation federated across nodes — see [data/datavalgen/README.md](data/datavalgen/README.md) and "Federated datavalgen validate" below |
+| `data/datavalgen/` | Pydantic schema ("example" model) + CLI for generating/validating fictional patient CSVs by hand, plus a vantage6 algorithm (`v6-validate/`) that runs that same validation federated across nodes. All setup, Docker, and run instructions live in [data/datavalgen/README.md](data/datavalgen/README.md) — see "Federated datavalgen validate" below for how it fits into this harness |
 
 Each data source's matching node profile (`infrastructure/nodes.<profile>.env`) and the algorithm that consumes it are documented together in the algorithm-specific sections below.
 
@@ -314,35 +314,9 @@ Notes:
 
 ## Federated datavalgen validate
 
-`data/datavalgen/v6-validate/` is a vantage6 algorithm that checks every node's local CSV against a `datavalgen` pydantic model *without* centralizing any data: each node validates its own file and returns only a pass/fail verdict plus an error count — never the offending cell values (same privacy stance as datavalgen's own `safe_validate`; see `data/datavalgen/README.md`'s "Got: .." note). The central task then reports which organizations have correctly formatted data.
+`data/datavalgen/v6-validate/` is a vantage6 algorithm that checks every node's local CSV against a `datavalgen` pydantic model *without* centralizing any data: each node validates its own file and returns only a pass/fail verdict plus an error count — never the offending cell values. The central task then reports which organizations have correctly formatted data.
 
-It's built on top of `data/datavalgen`'s own image (`ghcr.io/mdw-nl/datavalgen:v0.4.3` + the `example` model/factory package), not a fresh `python` base, so its build context is `data/datavalgen`, not `data/datavalgen/v6-validate`.
-
-1. **Start the network with the datavalgen node data** — uses `infrastructure/nodes.datavalgen.env`:
-
-   ```bash
-   cd infrastructure
-   ENVIRONMENT=DEV ./infra.sh --nodes datavalgen up
-   ```
-
-2. **Build the algorithm image** (build context is `data/datavalgen`, Dockerfile is in the `v6-validate/` subfolder):
-
-   ```bash
-   cd data/datavalgen
-   docker build -f v6-validate/Dockerfile -t datavalgen-validate:local .
-   ```
-
-3. **Run it on the network** (from repo root):
-
-   ```bash
-   uv run python data/datavalgen/v6-validate/run_study.py
-   ```
-
-   Submits the validation task, waits for every node, and prints an OK/FAILED line per organization.
-
-Notes:
-- Only validates CSV databases (`db_type=csv` in the node spec) — it validates file structure/values, not SQL sources.
-- To check against a different registered model, edit `MODEL` in `run_study.py` (must be an entry point under `datavalgen.models` in the `datavalgen-test` distribution, e.g. new models added to `data/datavalgen/src/datavalgen_test/model.py`).
+Full instructions — building both of `data/datavalgen`'s Docker images, starting the network with `nodes.datavalgen.env`, and running the task — are all in [data/datavalgen/README.md](data/datavalgen/README.md), so they stay in one place instead of drifting out of sync with this file.
 
 ## Notes
 

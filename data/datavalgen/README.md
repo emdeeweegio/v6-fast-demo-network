@@ -1,15 +1,10 @@
 # datavalgen-test
 
 A `datavalgen` model and factory for a small fictional patient dataset, packaged
-so it can be validated and generated via the `datavalgen` CLI, or as a Docker
-image (e.g. for a vantage6 node).
-
-This folder builds two separate Docker images for two separate audiences:
-`Dockerfile` (a standalone CLI image, for a human generating/validating data
-by hand) and `v6-validate/Dockerfile` (which layers a vantage6 algorithm on
-top of that same image, to run the identical validation as a federated task
-without centralizing any data). See "Docker (standalone CLI image)" and
-"Federated validation (vantage6)" below for each.
+so it can be validated and generated via the `datavalgen` CLI, as a standalone
+Docker image, or as a vantage6 algorithm that validates data federated across
+nodes. This file is the single source of truth for all of that — nothing
+datavalgen-related lives only in the repo root README.
 
 ## Schema
 
@@ -18,17 +13,46 @@ Registered under model/factory name `example`:
 | column              | type / rule                                  |
 |---------------------|-----------------------------------------------|
 | `patient_id`        | string, fixed format `PT-000001`              |
-| `sex`                | `F` or `M`                                    |
+| `sex`                | `female` or `male`                            |
 | `age_at_diagnosis`  | int, 0-110                                    |
 | `bmi`               | float, 10.0-70.0                              |
 | `charlson_ci`       | int, 0-20 (Charlson Comorbidity Index)        |
 | `disease_stage`     | `I`, `II`, `III`, or `IV`                     |
 
+## Quick reference
+
+This folder has **two Dockerfiles building two different images** for two
+different audiences. Everything below is run with `data/datavalgen/` as your
+working directory *except* the last row:
+
+| I want to...                                    | Command |
+|--------------------------------------------------|---------|
+| Generate/validate data locally, no Docker         | `uv run datavalgen generate -f example -n 10 -o data/patients.csv` |
+| Build the standalone CLI image                    | `docker build -t datavalgen-test:local .` |
+| Build the federated vantage6 algorithm image      | `docker build -f v6-validate/Dockerfile -t datavalgen-validate:local .` |
+| Run the federated task against the harness        | `uv run python data/datavalgen/v6-validate/run_study.py` **(from the repo root, not here)** |
+
+> [!WARNING]
+> Both `docker build` commands above use build context `data/datavalgen/` —
+> **never `cd` into `v6-validate/` first.** `v6-validate/Dockerfile` copies
+> `./src` and `./pyproject.toml` from this folder (the same model/factory
+> package `./Dockerfile` uses), so building with `v6-validate/` as the context
+> is missing those files and fails with `COPY failed: file not found`. The
+> `-f v6-validate/Dockerfile` flag is what lets you point at that Dockerfile
+> while keeping the context here.
+
+> [!NOTE]
+> `run_study.py` imports `vantage6.client`, which is a dependency of the
+> **repo root's** `.venv` (see the root `pyproject.toml`), not this folder's
+> `.venv`. Run it with `uv run` from the repo root — running it from inside
+> `data/datavalgen/` will fail with `ModuleNotFoundError: No module named
+> 'vantage6'`.
+
 ## Local development (no Docker)
 
 > [!IMPORTANT]
-> Unlike the Docker image, `uv sync` here does **not** fetch `datavalgen` from
-> anywhere — `pyproject.toml` points at it via a local editable path
+> Unlike the Docker images, `uv sync` here does **not** fetch `datavalgen`
+> from anywhere — `pyproject.toml` points at it via a local editable path
 > (`../../../datavalgen`), so it requires a checkout of the
 > [mdw-nl/datavalgen](https://github.com/mdw-nl/datavalgen) repo as a sibling
 > of `v6-infrastructure-sh`, i.e.:
@@ -38,8 +62,7 @@ Registered under model/factory name `example`:
 > │   └── data/datavalgen/   <- this project
 > └── datavalgen/            <- clone of mdw-nl/datavalgen
 > ```
-> Clone it first if you don't already have it:
-
+> Clone it first if you don't already have it.
 
 ```bash
 uv sync
@@ -58,11 +81,12 @@ Validate a CSV:
 uv run datavalgen validate -m example -d data/patients.csv
 ```
 
-## Docker (standalone CLI image)
+## Image 1: standalone CLI (`Dockerfile`)
 
-No `datavalgen` checkout needed here — the image is built `FROM
-ghcr.io/mdw-nl/datavalgen:v0.4.3`, which already has `datavalgen` installed;
-this project's `Dockerfile` only adds the local model/factory package on top.
+For a human generating/validating data by hand. No `datavalgen` checkout
+needed — the image is built `FROM ghcr.io/mdw-nl/datavalgen:v0.4.3`, which
+already has `datavalgen` installed; this project's `Dockerfile` only adds the
+local model/factory package on top.
 
 Build the image:
 ```bash
@@ -106,6 +130,46 @@ docker run \
 > value ("Got: ..") to help you fix it locally. Don't share that output
 > outside your own environment.
 
-## Federated validation (vantage6)
+## Image 2: federated vantage6 algorithm (`v6-validate/Dockerfile`)
 
-`v6-validate/` wraps this same model/factory package into a vantage6 algorithm that validates each node's data in place and reports only pass/fail + error counts back centrally — no raw values ever leave a node. See the "Federated datavalgen validate" section in the repo root [README.md](../../README.md) for how to build and run it.
+`v6-validate/` wraps the same model/factory package into a vantage6 algorithm
+that validates each node's data in place and reports only pass/fail + error
+counts back centrally — no raw values ever leave a node. It's built on top of
+this same `Dockerfile`'s base image, not a fresh `python` base, which is why
+its build context is `data/datavalgen/` too (see the warning above).
+
+Build the image:
+```bash
+docker build -f v6-validate/Dockerfile -t datavalgen-validate:local .
+```
+
+Run it against the local harness:
+
+1. **Start the network with the datavalgen node data** — uses
+   `infrastructure/nodes.datavalgen.env`:
+
+   ```bash
+   cd infrastructure
+   ENVIRONMENT=DEV ./infra.sh --nodes datavalgen up
+   ```
+
+2. **Build the algorithm image** — the command above, run from
+   `data/datavalgen/`.
+
+3. **Run it** (from the repo root, using the root `.venv` — see the note
+   above):
+
+   ```bash
+   uv run python data/datavalgen/v6-validate/run_study.py
+   ```
+
+   Submits the validation task, waits for every node, and prints an OK/FAILED
+   line per organization.
+
+Notes:
+- Only validates CSV databases (`db_type=csv` in the node spec) — it validates
+  file structure/values, not SQL sources.
+- To check against a different registered model, edit `MODEL` in
+  `run_study.py` (must be an entry point under `datavalgen.models` in the
+  `datavalgen-test` distribution, e.g. new models added to
+  `src/datavalgen_test/model.py`).

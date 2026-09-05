@@ -21,8 +21,8 @@ class ExampleDataFactory(BaseDataModelFactory):
         return f"PT-{next(cls._id_counter):06d}"
 
     @classmethod
-    def sex(cls) -> Literal["F", "M"]:
-        return "F" if cls.__random__.random() < 0.5 else "M"
+    def sex(cls) -> Literal["female", "male"]:
+        return "female" if cls.__random__.random() < 0.5 else "male"
 
     @classmethod
     def age_at_diagnosis(cls) -> int:
@@ -32,8 +32,8 @@ class ExampleDataFactory(BaseDataModelFactory):
 
     @post_generated
     @classmethod
-    def bmi(cls, sex: Literal["F", "M"]) -> float:
-        mean_bmi = {"F": 26.5, "M": 27.5}[sex]
+    def bmi(cls, sex: Literal["female", "male"]) -> float:
+        mean_bmi = {"female": 26.5, "male": 27.5}[sex]
         value = cls.__random__.gauss(mean_bmi, 4.5)
         return round(min(max(value, 15.0), 55.0), 1)
 

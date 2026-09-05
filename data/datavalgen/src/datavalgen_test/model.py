@@ -12,7 +12,7 @@ class ExampleDataModel(BaseModel):
         ),
     ]
     sex: Annotated[
-        Literal["F", "M"],
+        Literal["female", "male"],
         Field(description="Administrative sex."),
     ]
     age_at_diagnosis: Annotated[
